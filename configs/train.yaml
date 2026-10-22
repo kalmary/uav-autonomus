@@ -1,0 +1,3 @@
+device: cpu
+stage: 1
+pretrained_checkpoint: null
