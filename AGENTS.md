@@ -17,7 +17,7 @@ Read `docs/PROJECT.md` before architectural work. It defines the intended traini
 
 ## Current state and intended structure
 
-The repository is currently an early Python scaffold: `main.py`, `pyproject.toml`, `README.md` and `docs/PROJECT.md`. Add only the part of the intended structure needed by the current task; do not create empty modules or speculative framework code.
+The repository contains an initialized Python scaffold. Add implementation files only when the current task needs them; do not create speculative framework code.
 
 The target layout described in `docs/PROJECT.md` is:
 
@@ -45,35 +45,32 @@ Keep these responsibilities separate:
 
 ## Before editing
 
-- Read the affected files and the relevant section of `docs/PROJECT.md`.
+- Read the affected files before editing.
 - Search every caller before changing a function signature, tensor shape, return value or side effect.
 - Check configuration, tests, fixtures, entry points and checkpoint compatibility affected by the change.
 - Treat observation and action spaces, tensor shapes, reward definitions, episode-ending rules, YAML keys and checkpoint formats as public contracts once introduced.
 - Keep the change limited to the requested outcome. Report unrelated issues instead of fixing them opportunistically.
-- Do not assume a proposed dependency or directory already exists; verify it in the repository first.
 
 ## Implementation guidance
 
 - Prefer the smallest implementation that completes the current milestone. Reuse existing code and installed dependencies before adding abstractions or packages.
 - Use descriptive, general English names. Preserve established mathematical symbols and domain terms where they make equations easier to compare with their source.
 - Keep functions focused and data flow explicit. Add a shared abstraction only when at least two real implementations need the same contract.
-- Do not add compatibility wrappers, factories or plugin systems for hypothetical future implementations.
 - Keep physics equations and their ordering recognizable. Do not change coefficients, units, integration rules, clamping, thresholds or initial conditions as part of unrelated cleanup.
 - Put tunable physical values, scenario settings and RL hyperparameters in YAML. Constants that define an invariant or tensor index may stay close to the code.
 - Validate external configuration, checkpoint metadata and public API inputs early. Do not hide invalid state with broad exception handling or silent defaults.
 - Add comments only when a constraint, unit convention or numerical decision is not clear from the code.
-- Do not add references to coding assistants, generated code or development conversations.
 
 ## Tensor and environment rules
 
 - Keep simulation operations batched. Avoid Python loops over individual environments in the training hot path when a PyTorch tensor operation expresses the same work.
-- Use a consistent batch-first convention, normally `(num_envs, ...)`, and document the public observation, action and state shapes.
+- Use a consistent batch-first convention, normally `(num_envs, ...)`, and document the meaning and shape of public observations, actions and state.
 - Preserve tensor `device` and `dtype`. Create constants and temporary tensors on the same device and with a compatible dtype as the values they interact with.
 - Avoid implicit CPU transfers, `.numpy()` calls and device synchronization inside `step` or physics updates. Transfer data only at explicit logging, evaluation or I/O boundaries.
 - Make reset operations work for both all environments and a selected subset without corrupting the remaining batch.
 - Keep Gymnasium `terminated` and `truncated` semantics distinct. Return data in the API shape and type required by the installed Gymnasium version.
 - Make seeding explicit for Python, NumPy, PyTorch, environments and opponent sampling where those components are used.
-- Keep rewards and observations numerically stable: state units must be explicit, angles must use one documented convention, and normalization must not divide by zero.
+- Keep rewards and observations numerically stable: state units and coordinate frames must be explicit, angles must use one documented convention, and normalization must not divide by zero.
 - Run learned opponents in evaluation mode without gradient tracking. Checkpoint loading must validate observation/action dimensions before use.
 
 ## Training and self-play
@@ -82,15 +79,15 @@ Keep these responsibilities separate:
 - Stage I uses progressively harder deterministic opponents. Stage II starts from a compatible Stage I checkpoint and replaces the opponent with frozen policies sampled from a historical pool.
 - Do not change observation or action dimensions between transfer-learning stages unless the task explicitly includes a migration strategy.
 - Save enough metadata with checkpoints to reproduce the model architecture, spaces and relevant configuration.
-- Treat `checkpoints/`, training logs and telemetry as generated artifacts. Do not commit large or generated outputs unless the user explicitly requests a curated artifact.
 
 ## Dependencies and configuration
 
 - Python must satisfy the version declared in `pyproject.toml`.
-- Use `uv` for dependency and environment management. Add runtime packages to project dependencies and test-only tools to the `test` dependency group; update `uv.lock` in the same change.
-- Do not add PyTorch, Gymnasium, an RL framework, Hydra/OmegaConf or PyYAML until code in the current task uses it. When alternatives are listed in `docs/PROJECT.md`, choose only the one required by the implemented path.
+- Use `uv` for dependency and environment management, and update `uv.lock` with dependency changes. Runtime packages belong in project dependencies, visualization tools in `dev`, and test-only tools in `test`.
+- PyTorch uses mutually exclusive extras: `cpu` on macOS or Linux without CUDA, and `cuda` only on Linux with a compatible NVIDIA driver. Do not silently substitute one backend for the other.
+- When alternatives are listed in `docs/PROJECT.md`, add only the implementation selected for the current path.
 - Never edit `.venv` or install unrecorded packages into it.
-- Keep device selection and experiment settings in configuration. Do not hard-code CUDA availability or silently move a requested CUDA run to CPU.
+- Keep device selection and experiment settings in configuration; do not hard-code CUDA availability.
 - Never store credentials, machine-specific absolute paths or private dataset locations in tracked configuration.
 
 ## Tests and verification
@@ -107,7 +104,6 @@ Keep these responsibilities separate:
 
 - Keep `README.md` focused on setup, primary commands and links to detailed design documentation.
 - Update `docs/PROJECT.md` when an architectural decision or roadmap assumption changes, rather than allowing code and the project description to diverge.
-- Document units, coordinate frames, observation/action meanings and checkpoint compatibility next to the public interface that relies on them.
 - Do not commit virtual environments, caches, training runs, generated telemetry or uncurated checkpoints.
 
 ## Git and user changes
