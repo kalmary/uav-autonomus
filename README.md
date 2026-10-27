@@ -1,15 +1,22 @@
-# UAV autonomous control
+# UAV horizontal path planning
 
-Install the project with the PyTorch backend appropriate for the machine:
+This project uses hybrid global/local planning to produce a collision-free
+horizontal route from point A to point B. With known building geometry,
+`extremitypathfinder` calculates the initial geometric shortest path. During
+flight, streamed LiDAR observations validate that route and trigger local
+detours when observed obstacles differ from the map.
 
-```shell
-# macOS or Linux without CUDA
-uv sync --extra cpu
+The local planner also works without an initial map or global route. Initial
+planning is replaceable so another 2D planner or a future 3D planner can be
+introduced without changing mission coordination.
 
-# Linux with an NVIDIA driver compatible with CUDA 12.6
-uv sync --extra cuda
-```
+The initial sensor model is a rotating horizontal LiDAR with one beam, a 10 Hz
+scan frequency and a 10 m maximum range. These values and the minimum obstacle
+distance are configurable.
 
-The `dev` group, installed by default by uv, contains visualization tools. Test dependencies remain separate and can be added with `uv sync --extra cpu --group test` or `uv sync --extra cuda --group test`.
+The implementation will integrate with a Three.js simulation. Its message
+protocol and the planner runtime will be selected after the simulator is
+available.
 
-See [`docs/PROJECT.md`](docs/PROJECT.md) for the architecture and roadmap.
+See [`docs/PROJECT.md`](docs/PROJECT.md) for the planned behavior and
+[`docs/STATUS.md`](docs/STATUS.md) for the current implementation status.

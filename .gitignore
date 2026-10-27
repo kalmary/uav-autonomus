@@ -8,3 +8,21 @@ wheels/
 
 # Virtual environments
 .venv
+
+.DS_Store
+.env/
+/db_param.txt
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+.import_laz_state.json
+.import_laz_state.json.*
+
+fixtures/
+tmp/

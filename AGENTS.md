@@ -2,114 +2,121 @@
 
 ## Project purpose
 
-This repository develops a high-performance reinforcement-learning system for autonomous control and maneuvering of a conventional drone. The intended scenarios progress from basic flight and target interception to 1v1 combat trained with transfer learning and self-play.
+This repository develops a hybrid global/local path planner for horizontal UAV
+flight. When world geometry is known, an optional global planner calculates an
+initial route before flight. During flight, LiDAR observations are authoritative
+and a local planner validates or modifies the route before returning checkpoints.
 
-The core design goals are:
+The first milestone is independent of UAV flight dynamics. Treat the vehicle
+as a point in a 2D plane and optimize geometric path length. A time-optimal
+route requires motion constraints and is outside the initial scope.
 
-- vectorized simulation of many environments in one process;
-- the same physics and neural-network code running on CPU or CUDA;
-- a stable environment interface independent of the selected RL algorithm;
-- interchangeable scripted and learned opponents;
-- physical parameters, scenarios and training hyperparameters stored in YAML rather than embedded in code;
-- fast headless training without a 3D engine.
+Read `docs/PROJECT.md` before architectural work and `docs/STATUS.md` before
+assuming that a planned component is implemented.
 
-Read `docs/PROJECT.md` before architectural work. It defines the intended training stages, technology choices and roadmap. Treat choices described there as the current direction, not as implemented functionality.
+## Current scope
 
-## Current state and intended structure
+- horizontal planning only;
+- one rotating LiDAR beam initially, with the number of beams configurable;
+- nominal scan frequency of 10 Hz and range of 10 metres, both configurable;
+- configurable minimum obstacle distance;
+- an optional building-height grid may be supplied before flight;
+- flight without a prior map or initial global plan must remain supported;
+- global planning is replaceable so another 2D or future 3D planner can be used;
+- output is an ordered sequence of 2D checkpoints.
 
-The repository contains an initialized Python scaffold. Add implementation files only when the current task needs them; do not create speculative framework code.
-
-The target layout described in `docs/PROJECT.md` is:
-
-```text
-configs/
-  dynamics/       physical parameters and model matrices
-  agents/         algorithm and network hyperparameters
-  train.yaml      device, training stage and checkpoint selection
-src/
-  dynamics/       vectorized flight dynamics
-  envs/           Gymnasium environment, rewards and opponents
-  agents/         policies, algorithm construction and self-play
-checkpoints/      generated model weights and opponent snapshots
-train.py          training entry point
-inference.py      evaluation and telemetry entry point
-```
-
-Keep these responsibilities separate:
-
-- `dynamics` updates physical state from state, controls and timestep. It must not depend on rewards, opponents or an RL framework.
-- `envs` owns Gymnasium spaces, reset/step behavior, observations, rewards, termination and scenario logic.
-- `agents` owns neural networks, RL algorithm integration, checkpoint loading and the self-play policy pool.
-- `train.py` and `inference.py` compose modules and handle configuration; they do not reimplement physics or environment logic.
-- `configs` contains tunable values. Code validates configuration at the boundary and passes typed runtime values inward.
+The planner requires the UAV pose in a stable coordinate frame. Keep simulator
+transport separate from mapping and route planning so the planner is not tied
+to Three.js or a particular message protocol.
 
 ## Before editing
 
 - Read the affected files before editing.
-- Search every caller before changing a function signature, tensor shape, return value or side effect.
-- Check configuration, tests, fixtures, entry points and checkpoint compatibility affected by the change.
-- Treat observation and action spaces, tensor shapes, reward definitions, episode-ending rules, YAML keys and checkpoint formats as public contracts once introduced.
-- Keep the change limited to the requested outcome. Report unrelated issues instead of fixing them opportunistically.
+- Search every caller before changing a function signature, coordinate frame,
+  data shape, return value or side effect.
+- Check configuration, tests, fixtures and simulator integration affected by
+  the change.
+- Treat input messages, coordinates, units, occupancy values, planner status
+  and checkpoint output as public contracts once introduced.
+- Keep the change limited to the requested outcome. Report unrelated issues
+  instead of fixing them opportunistically.
 
 ## Implementation guidance
 
-- Prefer the smallest implementation that completes the current milestone. Reuse existing code and installed dependencies before adding abstractions or packages.
-- Use descriptive, general English names. Preserve established mathematical symbols and domain terms where they make equations easier to compare with their source.
-- Keep functions focused and data flow explicit. Add a shared abstraction only when at least two real implementations need the same contract.
-- Keep physics equations and their ordering recognizable. Do not change coefficients, units, integration rules, clamping, thresholds or initial conditions as part of unrelated cleanup.
-- Put tunable physical values, scenario settings and RL hyperparameters in YAML. Constants that define an invariant or tensor index may stay close to the code.
-- Validate external configuration, checkpoint metadata and public API inputs early. Do not hide invalid state with broad exception handling or silent defaults.
-- Add comments only when a constraint, unit convention or numerical decision is not clear from the code.
+- Prefer the smallest implementation that completes the current milestone.
+- Keep sensor ingestion, world-model updates, path planning and simulator
+  transport separate.
+- Use descriptive, general English names.
+- Put tunable values such as LiDAR range, scan frequency, grid resolution and
+  obstacle clearance in configuration.
+- Validate external messages and configuration at the boundary. Do not hide
+  invalid state with broad exception handling or silent defaults.
+- State coordinate frames, angle conventions, units and timestamp semantics
+  explicitly.
+- Add comments only when a constraint or numerical decision is not clear from
+  the code.
 
-## Tensor and environment rules
+## Planning rules
 
-- Keep simulation operations batched. Avoid Python loops over individual environments in the training hot path when a PyTorch tensor operation expresses the same work.
-- Use a consistent batch-first convention, normally `(num_envs, ...)`, and document the meaning and shape of public observations, actions and state.
-- Preserve tensor `device` and `dtype`. Create constants and temporary tensors on the same device and with a compatible dtype as the values they interact with.
-- Avoid implicit CPU transfers, `.numpy()` calls and device synchronization inside `step` or physics updates. Transfer data only at explicit logging, evaluation or I/O boundaries.
-- Make reset operations work for both all environments and a selected subset without corrupting the remaining batch.
-- Keep Gymnasium `terminated` and `truncated` semantics distinct. Return data in the API shape and type required by the installed Gymnasium version.
-- Make seeding explicit for Python, NumPy, PyTorch, environments and opponent sampling where those components are used.
-- Keep rewards and observations numerically stable: state units and coordinate frames must be explicit, angles must use one documented convention, and normalization must not divide by zero.
-- Run learned opponents in evaluation mode without gradient tracking. Checkpoint loading must validate observation/action dimensions before use.
-
-## Training and self-play
-
-- Keep the environment independent of PPO, SAC, TRPO and any particular RL library. Framework adapters belong in `agents` or the training entry point.
-- Stage I uses progressively harder deterministic opponents. Stage II starts from a compatible Stage I checkpoint and replaces the opponent with frozen policies sampled from a historical pool.
-- Do not change observation or action dimensions between transfer-learning stages unless the task explicitly includes a migration strategy.
-- Save enough metadata with checkpoints to reproduce the model architecture, spaces and relevant configuration.
+- Keep initial global planning optional and behind a small planner contract.
+- For a known static 2D map, use `extremitypathfinder` to calculate the initial
+  geometric shortest path.
+- Convert a building-height grid into blocked cells for the mission altitude,
+  then apply the configured clearance before global planning.
+- Build a 2D occupancy representation from pose-aligned LiDAR rays.
+- Mark the traversed part of a ray as free and a valid return as occupied.
+- Inflate occupied space by the configured minimum obstacle distance before
+  planning.
+- Treat the global route as guidance, not as confirmed free space. The local
+  planner must validate the route against current LiDAR observations.
+- Use A* on the current local occupancy grid for the first reactive replanner;
+  simplify its grid path before emitting checkpoints.
+- Replan a local detour when observed geometry differs from the initial map and
+  rejoin the global route when practical.
+- Without an initial route, use the destination as the long-term target and
+  advance through locally safe checkpoints.
+- Do not claim global optimality in an unknown environment. The initial target
+  is the shortest collision-free path in the current world model.
+- Checkpoints must not cross occupied or inflated cells.
 
 ## Dependencies and configuration
 
-- Python must satisfy the version declared in `pyproject.toml`.
-- Use `uv` for dependency and environment management, and update `uv.lock` with dependency changes. Runtime packages belong in project dependencies, visualization tools in `dev`, and test-only tools in `test`.
-- PyTorch uses mutually exclusive extras: `cpu` on macOS or Linux without CUDA, and `cuda` only on Linux with a compatible NVIDIA driver. Do not silently substitute one backend for the other.
-- When alternatives are listed in `docs/PROJECT.md`, add only the implementation selected for the current path.
+- Python must satisfy the version declared in `pyproject.toml` while this
+  repository remains Python-based.
+- Use `uv` for dependency and environment management, and update `uv.lock`
+  with dependency changes.
+- Reuse the standard library and installed dependencies before adding a
+  package.
 - Never edit `.venv` or install unrecorded packages into it.
-- Keep device selection and experiment settings in configuration; do not hard-code CUDA availability.
-- Never store credentials, machine-specific absolute paths or private dataset locations in tracked configuration.
+- Never store credentials or machine-specific paths in tracked configuration.
 
 ## Tests and verification
 
-- For behavior changes, add or update the narrowest test that proves the contract, then implement the smallest passing change.
-- Physics tests should cover tensor shapes, batched behavior, device/dtype preservation and a small known trajectory or invariant where feasible.
-- Environment tests should cover reset, one step, selected-environment reset, spaces, termination versus truncation and deterministic seeding without requiring a long training run.
-- Training integration tests should use tiny configurations and mocked or minimal workloads. Do not make normal tests depend on CUDA, large checkpoints, external services or hours of training.
-- Run focused tests with `uv run --group test pytest <path-or-test>`. Run the full suite when shared physics, environment contracts, configuration loading or packaging changes.
-- For documentation-only changes, verify referenced paths and commands; do not add tests that merely restate documentation.
-- Report exactly what was run and what could not be checked because hardware, data, checkpoints or dependencies were unavailable.
+- For behavior changes, add or update the narrowest test that proves the
+  contract.
+- Mapping tests should cover ray endpoints, free-space updates, maximum-range
+  readings and obstacle inflation.
+- Planner tests should cover known-map initial planning, operation without an
+  initial plan, a locally forced detour, no available route, checkpoint
+  collision checks and deterministic results.
+- Integration tests should use small synthetic scans and must not require a
+  graphical simulator.
+- Report exactly what was run and what could not be checked.
 
 ## Documentation and generated files
 
-- Keep `README.md` focused on setup, primary commands and links to detailed design documentation.
-- Update `docs/PROJECT.md` when an architectural decision or roadmap assumption changes, rather than allowing code and the project description to diverge.
-- Do not commit virtual environments, caches, training runs, generated telemetry or uncurated checkpoints.
+- Keep `README.md` focused on setup, primary commands and links to detailed
+  documentation.
+- Update `docs/PROJECT.md` when the planning contract or architectural
+  direction changes.
+- Update `docs/STATUS.md` when implementation status or a known limitation
+  changes.
+- Do not commit virtual environments, caches, simulator recordings or
+  generated routes.
 
 ## Git and user changes
 
-- Commit changes frequently after each coherent, verified increment. Keep commits focused and use concise messages that describe the completed change.
-- Local staging and commits do not require separate approval. Review the exact files being staged and never include unrelated user changes, generated artifacts or secrets.
-- Do not push, pull, switch branches, merge, rebase, reset or otherwise change branches, remotes or published history without explicit user approval.
+- Do not perform Git operations without explicit user approval.
 - Preserve existing user changes and do not overwrite unrelated work.
-- Do not add repository traces suggesting that changes were produced by an assistant or conversation.
+- Do not add repository traces suggesting that changes were produced by an
+  assistant or conversation.
