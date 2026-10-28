@@ -59,8 +59,10 @@ to Three.js or a particular message protocol.
 ## Planning rules
 
 - Keep initial global planning optional and behind a small planner contract.
-- For a known static 2D map, use `extremitypathfinder` to calculate the initial
-  geometric shortest path.
+- Use NetworkX A* for shortest paths on the collision-free planning graph.
+  Initial planning requires available geometry and enabled preplanning.
+- The `--preplan` / `--no-preplan` CLI option overrides the YAML `preplan`
+  setting. Without an override, use YAML, then built-in defaults.
 - Convert a building-height grid into blocked cells for the mission altitude,
   then apply the configured clearance before global planning.
 - Build a 2D occupancy representation from pose-aligned LiDAR rays.
@@ -73,10 +75,14 @@ to Three.js or a particular message protocol.
   simplify its grid path before emitting checkpoints.
 - Replan a local detour when observed geometry differs from the initial map and
   rejoin the global route when practical.
+- If the global route cannot be safely rejoined, continue dynamic planning
+  toward the destination. Failure to create an initial route also falls back
+  to dynamic planning. Disabling preplanning never disables local planning.
 - Without an initial route, use the destination as the long-term target and
   advance through locally safe checkpoints.
 - Do not claim global optimality in an unknown environment. The initial target
-  is the shortest collision-free path in the current world model.
+  is the shortest collision-free path in the current world model. A grid graph
+  constrains optimality to its available edges and resolution.
 - Checkpoints must not cross occupied or inflated cells.
 
 ## Dependencies and configuration
@@ -85,6 +91,7 @@ to Three.js or a particular message protocol.
   repository remains Python-based.
 - Use `uv` for dependency and environment management, and update `uv.lock`
   with dependency changes.
+- Use YAML for planner configuration.
 - Reuse the standard library and installed dependencies before adding a
   package.
 - Never edit `.venv` or install unrecorded packages into it.

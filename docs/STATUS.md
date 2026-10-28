@@ -1,6 +1,6 @@
 # Status projektu
 
-Stan na 27.10.2026.
+Stan na 28.10.2026.
 
 Cel projektu został ograniczony do planowania poziomej trasy UAV od punktu A do
 punktu B na podstawie danych z LiDAR-u. Wcześniejszy kierunek obejmujący model
@@ -11,11 +11,15 @@ dynamiki lotu, środowisko RL i self-play nie należy do bieżącego zakresu.
 - planowanie odbywa się w 2D;
 - konfiguracja i dynamika UAV są pomijane;
 - znana siatka wysokości budynków może posłużyć do planowania przed lotem;
-- `extremitypathfinder` jest wybraną implementacją początkowego planera 2D;
+- NetworkX A* jest wybraną metodą początkowego planowania na grafie 2D;
 - A* na lokalnej siatce zajętości jest wybraną pierwszą metodą reaktywnego
   ponownego planowania;
 - planowanie początkowe jest opcjonalne i wymienne;
+- planowanie początkowe wymaga geometrii i włączonego `preplan`;
+- CLI `--preplan` / `--no-preplan` ma pierwszeństwo przed konfiguracją YAML;
 - lokalne dane LiDAR-u mogą zmienić trasę zaplanowaną z mapy;
+- planer dynamiczny omija nowe przeszkody i próbuje bezpiecznie wrócić na trasę;
+- brak możliwości powrotu na trasę nie wyłącza dynamicznego planowania do celu;
 - lot bez mapy i bez trasy początkowej musi być obsługiwany;
 - LiDAR ma konfigurowalną liczbę promieni, częstotliwość i zasięg;
 - wartości początkowe to jeden promień, 10 Hz i 10 m;
@@ -25,11 +29,27 @@ dynamiki lotu, środowisko RL i self-play nie należy do bieżącego zakresu.
 
 ## Stan implementacji
 
-Repozytorium zawiera scaffold poprzedniego podejścia do dynamiki lotu i RL.
-Nie ma jeszcze implementacji planera globalnego, mapowania LiDAR-u, lokalnego
-planowania ani integracji z symulatorem. `extremitypathfinder` nie został
-jeszcze dodany do zależności. Istniejących modułów nie należy traktować jako
-architektury nowego planera.
+Usunięto wcześniejsze moduły dynamiki lotu, treningu, agentów i środowisk RL
+oraz konfigurację treningu i katalog checkpointów. Usunięto zależności od
+Torch, Gymnasium, JSBSim, SKRL i Matplotlib oraz konfigurację indeksów
+CPU/CUDA.
+
+Nowa struktura obejmuje:
+
+- instalowalny pakiet `src` bez dodatkowego katalogu nadrzędnego;
+- walidowaną konfigurację YAML z parametrami LiDAR-u, siatki i marginesu;
+- ustawienie `preplan`, jego nadpisanie przez CLI i warunek dostępnej geometrii;
+- polecenie `uav-planner` do sprawdzania i wyświetlania konfiguracji;
+- kontrakt `GlobalPlanner` niezależny od konkretnej biblioteki i transportu;
+- osobne granice modułów `planning`, `mapping` i `integration`;
+- testy konfiguracji i jej walidacji.
+
+NetworkX i PyYAML zastępują `extremitypathfinder` oraz konfigurację TOML.
+Nie ma jeszcze adaptera planera NetworkX, mapowania LiDAR-u, lokalnego A*, koordynatora
+misji ani integracji z symulatorem. Polecenie konfiguracyjne nie wyznacza tras.
+Rozdzielczość siatki i margines bezpieczeństwa wymagają późniejszej kalibracji.
+Najkrótsza trasa oznacza optimum w dostępnym grafie aktualnego modelu, nie
+gwarancję globalnego optimum w nieznanym środowisku ani w ciągłej geometrii.
 
 ## Następny krok
 

@@ -1,0 +1,8 @@
+# Preplanning also requires available world geometry. Local planning always runs.
+preplan: true
+# Frequency is complete rotations per second; distance settings use metres.
+lidar_beams: 1
+lidar_frequency_hz: 10.0
+lidar_range_m: 10.0
+grid_resolution_m: 0.25
+obstacle_clearance_m: 0.5
